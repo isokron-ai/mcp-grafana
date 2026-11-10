@@ -68,7 +68,7 @@ type DashboardResponse struct {
 
 func getDashboardByUID(ctx context.Context, args GetDashboardByUIDParams) (*DashboardResponse, error) {
 	if args.Version != nil {
-		// D2 (GF-18): honor the advertised minimum=1 bound instead of forwarding
+		// Honor the advertised minimum=1 bound instead of forwarding
 		// a 0/negative version that Grafana would reject with an opaque error.
 		if *args.Version < 1 {
 			return nil, fmt.Errorf("version must be a positive integer (dashboard versions start at 1); omit version to fetch the current dashboard")
@@ -393,7 +393,7 @@ type AppliedOperation struct {
 }
 
 // UpdateDashboardResult is the dashboard save response plus, for patch-mode
-// updates, an echo of the operations that were applied (B1). The embedded
+// updates, an echo of the operations that were applied. The embedded
 // *models.PostDashboardOKBody keeps the existing result shape (uid, version,
 // url, status, ...) and promotes its fields; `applied` is additive. It lets an
 // agent skip the follow-up get_dashboard_by_uid it would otherwise issue just
@@ -430,7 +430,7 @@ func updateDashboard(ctx context.Context, args UpdateDashboardParams) (*UpdateDa
 		}
 	}
 	result := &UpdateDashboardResult{PostDashboardOKBody: dashboard}
-	// B1: in patch mode, echo the operations we applied so the caller can
+	// In patch mode, echo the operations we applied so the caller can
 	// confirm the write without a verify get_dashboard_by_uid.
 	if len(args.Operations) > 0 && args.UID != "" {
 		result.Applied = make([]AppliedOperation, 0, len(args.Operations))
@@ -495,7 +495,7 @@ func updateDashboardWithPatches(ctx context.Context, args UpdateDashboardParams)
 	for i, op := range args.Operations {
 		switch op.Op {
 		case "replace":
-			// C4 (GF-08): replace targets an existing value; error if the final
+			// Replace targets an existing value; error if the final
 			// key is absent instead of silently creating it. Use "add" to create.
 			if err := applyJSONPath(dashboardMap, op.Path, op.Value, false, true); err != nil {
 				return nil, fmt.Errorf("operation %d (%s at %s): %w", i, op.Op, op.Path, err)
@@ -505,7 +505,7 @@ func updateDashboardWithPatches(ctx context.Context, args UpdateDashboardParams)
 				return nil, fmt.Errorf("operation %d (%s at %s): %w", i, op.Op, op.Path, err)
 			}
 		case "remove":
-			// C4 (GF-08): remove targets an existing value; error if the final
+			// Remove targets an existing value; error if the final
 			// key is absent instead of silently succeeding.
 			if err := applyJSONPath(dashboardMap, op.Path, nil, true, true); err != nil {
 				return nil, fmt.Errorf("operation %d (%s at %s): %w", i, op.Op, op.Path, err)
@@ -537,7 +537,7 @@ func updateDashboardWithPatches(ctx context.Context, args UpdateDashboardParams)
 		folderUID = res.Meta.FolderUID
 	}
 
-	// GF-01 (v13): a classic dashboard read via the k8s API carries a spec
+	// A classic dashboard read via the k8s API carries a spec
 	// "version" that is not in the legacy save's version space, so a version-
 	// checked legacy save would 409 spuriously. The legacy version is the k8s
 	// metadata.generation, so use that value for the conflict check.
@@ -553,7 +553,7 @@ func updateDashboardWithPatches(ctx context.Context, args UpdateDashboardParams)
 		Dashboard: dashboardMap,
 		FolderUID: folderUID,
 		Message:   args.Message,
-		Overwrite: args.Overwrite, // GF-01: honor caller overwrite (default false) so Grafana version-checks; a concurrent save conflicts (412) instead of silently losing
+		Overwrite: args.Overwrite, // Honor caller overwrite (default false) so Grafana version-checks; a concurrent save conflicts (412) instead of silently losing
 		UserID:    args.UserID,
 	})
 }
@@ -821,7 +821,7 @@ func createOrUpdateDashboardV2(ctx context.Context, args UpdateDashboardParams) 
 			if !existing.IsV2 {
 				return nil, fmt.Errorf("dashboard %q is stored as classic v1 and cannot be replaced in place with a v2 (elements/layout) body: Grafana pins the stored schema version, so the v2 content would be silently down-converted to v1. Create a new dashboard (a different uid) for the v2 version instead", uid)
 			}
-			// C2 (GF-19): a full-body overwrite reuses the server's current
+			// A full-body overwrite reuses the server's current
 			// resourceVersion, so a concurrent edit would be silently lost. When
 			// the caller supplies the version their edit is based on, reject the
 			// save if the dashboard has advanced past it. The legacy dashboard
@@ -1265,7 +1265,7 @@ func applyJSONPath(data map[string]interface{}, path string, value interface{}, 
 		path = path[2:]
 	}
 
-	// C3 (GF-02): resolve equality selectors such as panels[?(@.id==2)] or
+	// Resolve equality selectors such as panels[?(@.id==2)] or
 	// panels[?(@.title=='CPU')] to the matching numeric index against the live
 	// dashboard, so a patch can target a panel by a stable id/title instead of a
 	// fragile array position. Runs before the reject checks below, so resolved
@@ -1315,8 +1315,8 @@ func applyJSONPath(data map[string]interface{}, path string, value interface{}, 
 var selectorRe = regexp.MustCompile(`\[\?\(?@?\.?\s*([A-Za-z0-9_]+)\s*==\s*('?"?)([^'"\)\]]+?)('?"?)\)?\]`)
 
 // resolveArraySelectors rewrites each equality selector in path to the numeric
-// [index] of the matching array element, evaluated left to right against data
-// (C3/GF-02). It errors if a selector matches no element or more than one, so
+// [index] of the matching array element, evaluated left to right against data.
+// It errors if a selector matches no element or more than one, so
 // an ambiguous or stale target fails loudly rather than patching the wrong
 // panel. Paths with no selector are returned unchanged.
 func resolveArraySelectors(data map[string]interface{}, path string) (string, error) {
@@ -1541,7 +1541,7 @@ func setAtSegment(current map[string]interface{}, segment JSONPathSegment, value
 	}
 
 	// Set the value directly. In strict mode (replace), the key must already
-	// exist — otherwise the operation would silently create it (C4/GF-08).
+	// exist — otherwise the operation would silently create it.
 	if strict {
 		if _, ok := current[segment.Key]; !ok {
 			return fmt.Errorf("field '%s' does not exist; 'replace' requires an existing value (use 'add' to create it)", segment.Key)
@@ -1567,7 +1567,7 @@ func removeAtSegment(current map[string]interface{}, segment JSONPathSegment, st
 	}
 
 	// In strict mode (remove), the key must already exist — otherwise the
-	// delete would silently succeed on a non-existent field (C4/GF-08).
+	// delete would silently succeed on a non-existent field.
 	if strict {
 		if _, ok := current[segment.Key]; !ok {
 			return fmt.Errorf("field '%s' does not exist; cannot remove a field that is not present", segment.Key)
