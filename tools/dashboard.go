@@ -15,6 +15,7 @@ import (
 
 	"github.com/PaesslerAG/gval"
 	"github.com/PaesslerAG/jsonpath"
+	"github.com/go-openapi/runtime"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/grafana/grafana-openapi-client-go/client/dashboards"
@@ -715,6 +716,15 @@ func updateDashboardWithFullJSON(ctx context.Context, args UpdateDashboardParams
 		dashboards.NewPostDashboardParamsWithContext(ctx).WithBody(cmd),
 	)
 	if err != nil {
+		// With expectedVersion the version sent is the caller's, so say which
+		// argument did not match. Grafana answers 412 (version-mismatch), or
+		// 409, which the client has no type for.
+		var apiErr *runtime.APIError
+		var mismatch *dashboards.PostDashboardPreconditionFailed
+		isConflict := errors.As(err, &apiErr) && apiErr.IsCode(http.StatusConflict)
+		if args.ExpectedVersion != nil && (isConflict || errors.As(err, &mismatch)) {
+			return nil, fmt.Errorf("unable to save dashboard: expectedVersion %d is not the dashboard's current version, so it changed since that version was read and the change was not saved. Fetch it with get_dashboard_by_uid, reapply the edit to that copy and send its version as expectedVersion: %w", *args.ExpectedVersion, err)
+		}
 		return nil, fmt.Errorf("unable to save dashboard: %w", err)
 	}
 	// Grafana's save response has no title; report the one that was saved.
